@@ -1,0 +1,475 @@
+local function getnamecall()
+    if game.PlaceId == 2788229376 then
+        return "UpdateMousePos"
+    elseif game.PlaceId == 5602055394 or game.PlaceId == 7951883376 then
+        return "MousePos"
+    elseif game.PlaceId == 9825515356 then
+        return "GetMousePos"
+    end
+end
+
+local namecalltype = getnamecall()
+
+function MainEventLocate()
+    for _,v in pairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+        if v.Name == "MainEvent" then
+            return v
+        end
+    end
+end
+
+-- // 360 Keybind
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local Toggle = getgenv().Anarchy.Key360.Toggle
+local RotationSpeed = getgenv().Anarchy.Key360.RotationSpeed
+local Keybind = getgenv().Anarchy.Key360.Keybind
+
+local function OnKeyPress(Input, GameProcessedEvent)
+    if Input.KeyCode == Keybind and not GameProcessedEvent then 
+        Toggle = not Toggle
+    end
+end
+
+UserInputService.InputBegan:Connect(OnKeyPress)
+
+local LastRenderTime = 0
+local FullCircleRotation = 2 * math.pi
+local TotalRotation = 0
+
+local function RotateCamera()
+    if Toggle then
+        local CurrentTime = tick()
+        local TimeDelta = math.min(CurrentTime - LastRenderTime, 0.01)
+        LastRenderTime = CurrentTime
+
+        local Rotation = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), math.rad(RotationSpeed * TimeDelta))
+        Camera.CFrame = Camera.CFrame * Rotation
+
+        TotalRotation = TotalRotation + math.rad(RotationSpeed * TimeDelta)
+        if TotalRotation >= FullCircleRotation then
+            Toggle = false
+            TotalRotation = 0
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(RotateCamera)
+
+
+local mainevent = MainEventLocate()
+
+-- // Shorthand
+local cfgAnarchy = getgenv().Anarchy
+local cfgMain = cfgAnarchy.General
+local cfgCamMain = cfgAnarchy.Camlock.Main
+local cfgCamFOV = cfgAnarchy.Camlock.FOV
+local cfgSilentMain = cfgAnarchy.Silent.Main
+local cfgSilentFOV = cfgAnarchy.Silent.FOV
+local cfgTrace = cfgAnarchy.Tracer
+local cfgAutoPred = cfgAnarchy.AutoPrediction
+
+-- // Optimization
+local vect3 = Vector3.new
+local vect2 = Vector2.new
+local cnew = CFrame.new
+
+-- // Libraries
+local NotificationHolder = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Module.Lua"))()
+local Notification = loadstring(game:HttpGet("https://raw.githubusercontent.com/BocusLuke/UI/main/STX/Client.Lua"))()
+
+-- // Services
+local uis = game:GetService("UserInputService")
+local rs = game:GetService("RunService")
+local plrs = game:GetService("Players")
+local ws = game:GetService("Workspace")
+
+-- // Script Variables
+local CToggle = false
+local lplr = plrs.LocalPlayer
+local CTarget = nil
+local CPart = nil
+local SToggle = false
+local STarget = nil
+local SPart = nil
+
+-- // Client Variables
+local m = lplr:GetMouse()
+local c = ws.CurrentCamera
+
+-- // Notification Function
+local function SendNotification(text)
+    Notification:Notify(
+        {Title = "Anarchy", Description = " " ..text},
+        {OutlineColor = Color3.fromRGB(255, 49, 49),Time = 2, Type = "image"},
+        {Image = "http://www.roblox.com/asset/?id=6023426923", ImageColor = Color3.fromRGB(255, 49, 49)}
+    )
+end 
+
+-- // Call notification function
+if cfgMain.Notifications then
+    SendNotification("Injecting Anarchy >.<")
+    wait(5)
+    SendNotification("Injected Anarchy >_<")
+end
+
+-- // Camlock FOV
+local CamlockFOV = Drawing.new("Circle")
+CamlockFOV.Visible = cfgCamFOV.ShowFOV
+CamlockFOV.Thickness = 1
+CamlockFOV.NumSides = 30
+CamlockFOV.Radius = cfgCamFOV.Radius * 3
+CamlockFOV.Color = cfgCamFOV.Color
+CamlockFOV.Filled = cfgCamFOV.Filled
+CamlockFOV.Transparency = cfgCamFOV.Transparency
+
+--Silent FOV
+local SilentFOV = Drawing.new("Circle")
+SilentFOV.Visible = cfgSilentFOV.ShowFOV
+SilentFOV.Thickness = 1
+SilentFOV.NumSides = 30
+SilentFOV.Radius = cfgSilentFOV.Radius * 3
+SilentFOV.Color = cfgSilentFOV.Color
+SilentFOV.Filled = cfgSilentFOV.Filled
+SilentFOV.Transparency = cfgSilentFOV.Transparency
+
+-- // Tracer
+local Line = Drawing.new("Line")
+Line.Color = cfgTrace.Color
+Line.Transparency = cfgTrace.Transparency
+Line.Thickness = 1
+Line.Visible = cfgTrace.Visible
+
+-- // Script Functions
+local function cfgFindTarget() -- // Find target
+    local d, t = math.huge, nil
+    for _,v in pairs (plrs:GetPlayers()) do
+        local _,os = c:WorldToViewportPoint(v.Character.PrimaryPart.Position)
+        if v ~= lplr and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health ~= 0 and v.Character:FindFirstChild("HumanoidRootPart") and os then
+            local pos = c:WorldToViewportPoint(v.Character.PrimaryPart.Position)
+            local magnitude = (vect2(pos.X, pos.Y) - vect2(m.X, m.Y + 36)).magnitude
+            if magnitude < d then
+                t = v
+                d = magnitude
+            end
+        end
+    end
+    return t
+end
+
+local function cfgFindPart() -- // Find aimpart
+    local d, p = math.huge, nil
+    if CTarget then
+        for _,v in pairs(CTarget.Character:GetChildren()) do
+            if table.find(cfgCamMain.Parts, v.Name) then
+                local pos = c:WorldToViewportPoint(v.Position)
+                local Magn = (vect2(m.X, m.Y + 36) - vect2(pos.X, pos.Y)).Magnitude
+                if Magn < d then
+                    d = Magn
+                    p = v
+                end
+            end
+        end
+        return p.Name
+    end
+end
+
+local function cfgFindSilentPart() -- // Find aimpart
+    local d, p = math.huge, nil
+    if CTarget then
+        for _,v in pairs(CTarget.Character:GetChildren()) do
+            if table.find(cfgSilentMain.Parts, v.Name) then
+                local pos = c:WorldToViewportPoint(v.Position)
+                local Magn = (vect2(m.X, m.Y + 36) - vect2(pos.X, pos.Y)).Magnitude
+                if Magn < d then
+                    d = Magn
+                    p = v
+                end
+            end
+        end
+        return p.Name
+    end
+end
+
+local function cfgCheckAnti(targ) -- // Anti-aim detection
+    if (targ.Character.HumanoidRootPart.Velocity.Y < -5 and targ.Character.Humanoid:GetState() ~= Enum.HumanoidStateType.Freefall) or targ.Character.HumanoidRootPart.Velocity.Y < -50 then
+        return true
+    elseif targ and (targ.Character.HumanoidRootPart.Velocity.X > 35 or targ.Character.HumanoidRootPart.Velocity.X < -35) then
+        return true
+    elseif targ and targ.Character.HumanoidRootPart.Velocity.Y > 60 then
+        return true
+    elseif targ and (targ.Character.HumanoidRootPart.Velocity.Z > 35 or targ.Character.HumanoidRootPart.Velocity.Z < -35) then
+        return true
+    else
+        return false
+    end
+end
+
+local function InSilentRadicfgs(target, section, fov) -- // Check if player is in the fov
+    if target then
+        local pos = nil
+        if not cfgCheckAnti(target) then
+            pos = c:WorldToViewportPoint(target.Character.PrimaryPart.Position + target.Character.PrimaryPart.Velocity * section.Prediction)
+        else
+            pos = c:WorldToViewportPoint(target.Character.PrimaryPart.Position + ((target.Character.Humanoid.MoveDirection * target.Character.Humanoid.WalkSpeed) * section.Prediction))
+        end
+        local mag = (vect2(m.X, m.Y + 36) - vect2(pos.X, pos.Y)).Magnitude
+        if mag < fov * 3 then
+            return true
+        else
+            return false
+        end
+    end
+end
+
+local function Silent()
+    if STarget then
+        if SPart and InSilentRadicfgs(STarget, cfgSilentMain, SilentFOV.Radius) then
+            if not cfgCheckAnti(STarget) then
+                mainevent:FireServer(namecalltype, STarget.Character[SPart].Position + (STarget.Character[SPart].Velocity * cfgSilentMain.Prediction))
+            else
+                mainevent:FireServer(namecalltype, STarget.Character[SPart].Position + ((STarget.Character.Humanoid.MoveDirection * STarget.Character.Humanoid.WalkSpeed) * cfgSilentMain.Prediction))
+            end
+        end
+    end
+end
+
+
+local function InRadicfgs(target, section, fov) -- // Check if player is in the fov
+    if target then
+        if cfgCamFOV.UseFOV then
+            local pos = nil
+            if not cfgCheckAnti(target) then
+                pos = c:WorldToViewportPoint(target.Character.PrimaryPart.Position + target.Character.PrimaryPart.Velocity * section.Prediction)
+            else
+                pos = c:WorldToViewportPoint(target.Character.PrimaryPart.Position + ((target.Character.Humanoid.MoveDirection * target.Character.Humanoid.WalkSpeed) * section.Prediction))
+            end
+            local mag = (vect2(m.X, m.Y + 36) - vect2(pos.X, pos.Y)).Magnitude
+            if mag < fov * 3 then
+                return true
+            else
+                return false
+            end
+        else
+            return true
+        end
+    end
+end
+
+uis.InputBegan:Connect(function(k,t)
+    if not t then
+        if k.KeyCode == Enum.KeyCode[cfgCamMain.Key:upper()] then
+            CToggle = true
+            CTarget = cfgFindTarget()
+            if cfgMain.Notifications then
+                SendNotification("locked onto "..CTarget.Name)
+            end
+        elseif k.KeyCode == Enum.KeyCode[cfgCamMain.UnlockKey:upper()] then
+            if CToggle then
+                CToggle = false
+                CTarget = nil
+                if cfgMain.Notifications then
+                    SendNotification("unlocked")
+                end
+            end
+        elseif k.KeyCode == Enum.KeyCode[cfgSilentMain.Toggle:upper()] and cfgSilentMain == "Regular" then
+            if SToggle then
+                SToggle = false
+                if cfgMain.Notifications then
+                    SendNotification("silent disabled")
+                end
+            else
+                SToggle = true
+                if cfgMain.Notifications then
+                    SendNotification("silent enabled")
+                end
+            end
+        end
+    end
+end)
+
+rs.RenderStepped:Connect(function()
+    if CTarget then
+        CPart = cfgFindPart()
+        local pos = nil
+        local anar = nil
+        if CTarget.Character.BodyEffects["K.O"].Value == true or lplr.Character.BodyEffects["K.O"].Value == true then
+            CToggle = false
+            CTarget = false
+        else
+            if cfgCamMain.Shake then
+                if cfgCamMain.PredictMovement then
+                    if not cfgCheckAnti(CTarget) then
+                        anar = CTarget.Character[CPart].Position + CTarget.Character[CPart].Velocity * cfgCamMain.Prediction + (vect3(
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue)
+                        ) * 0.1)
+                    else
+                        anar = CTarget.Character[CPart].Position + ((CTarget.Character.Humanoid.MoveDirection * CTarget.Character.Humanoid.WalkSpeed) * cfgCamMain.Prediction + (vect3(
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                            math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue)
+                        ) * 0.1))
+                    end
+                    pos = c:WorldToViewportPoint(anar)
+                else
+                    anar = CTarget.Character[CPart].Position + (vect3(
+                        math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                        math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue),
+                        math.random(-cfgCamMain.ShakeValue, cfgCamMain.ShakeValue)
+                    ) * 0.1)
+                    pos = c:WorldToViewportPoint(anar)
+                end
+            else
+                if cfgCamMain.PredictMovement then
+                    if not cfgCheckAnti(CTarget) then
+                        anar = CTarget.Character[CPart].Position + CTarget.Character[CPart].Velocity * cfgCamMain.Prediction
+                    else
+                        anar = CTarget.Character[CPart].Position + ((CTarget.Character.Humanoid.MoveDirection * CTarget.Character.Humanoid.WalkSpeed) * cfgCamMain.Prediction)
+                    end
+                    pos = c:WorldToViewportPoint(anar)
+                else
+                    anar = CTarget.Character[CPart].Position
+                    pos = c:WorldToViewportPoint(anar)
+                end
+            end
+            if InRadicfgs(CTarget, cfgCamMain, CamlockFOV.Radius) then
+                local main = nil
+                if cfgCamMain.SmoothLock then
+                    main = cnew(c.CFrame.p, anar)
+                    c.CFrame = c.CFrame:Lerp(main, cfgCamMain.Smoothness, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+                else
+                    c.CFrame = cnew(c.CFrame.p, anar)
+                end
+            end
+            if cfgMain.FOVMode == "Mouse" then
+                if cfgCamFOV.ShowFOV then
+                    CamlockFOV.Position = vect2(m.X, m.Y + 36)
+                end
+                if cfgSilentFOV.ShowFOV then
+                    SilentFOV.Position = vect2(m.X, m.Y + 36)
+                end
+            elseif cfgMain.FOVMode == "PredictionPoint" then
+                if cfgCamFOV.ShowFOV then
+                    CamlockFOV.Position = vect2(pos.X, pos.Y)
+                end
+                if cfgSilentFOV.ShowFOV then
+                    SilentFOV.Position = vect2(pos.X, pos.Y)
+                end
+            end
+            if cfgTrace.Enabled then
+                Line.Visible = true
+                Line.From = vect2(m.X, m.Y + 36)
+                Line.To = vect2(pos.X, pos.Y)
+            end
+        end
+    else
+        CamlockFOV.Position = vect2(m.X, m.Y + 36)
+        SilentFOV.Position = vect2(m.X, m.Y + 36)
+        Line.Visible = false
+    end
+end)
+
+lplr.Character.ChildAdded:Connect(function(tool)
+    if tool:IsA("Tool") then
+        tool.Activated:connect(function()
+            if cfgSilentMain.Mode == "Regular" then
+                if SToggle then
+                    STarget = cfgFindTarget()
+                    if STarget then
+                        SPart = cfgFindSilentPart()
+                        if SPart then
+                            Silent()
+                        end
+                    end
+                end
+            elseif cfgSilentMain.Mode == "Target" then
+                if CToggle then
+                    STarget = CTarget
+                    if STarget then
+                        SPart = cfgFindSilentPart()
+                        if SPart then
+                            Silent()
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+lplr.CharacterAdded:Connect(function(char)
+    char.ChildAdded:Connect(function(tool)
+        tool.Activated:connect(function()
+            if cfgSilentMain.Mode == "Regular" then
+                if SToggle then
+                    STarget = cfgFindTarget()
+                    if STarget then
+                        SPart = cfgFindSilentPart()
+                        if SPart then
+                            Silent()
+                        end
+                    end
+                end
+            elseif cfgSilentMain.Mode == "Target" then
+                if CToggle then
+                    STarget = CTarget
+                    if STarget then
+                        SPart = cfgFindSilentPart()
+                        if SPart then
+                            Silent()
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+end)
+
+-- // Auto Prediction
+coroutine.resume(coroutine.create(function()
+    while true do
+        if cfgAutoPred.Enabled then
+            local ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+            if ping <= 40 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping30_40
+            elseif ping <= 50 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping40_50
+            elseif ping <= 60 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping50_60
+            elseif ping <= 70 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping60_70
+            elseif ping <= 80 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping70_80
+            elseif ping <= 90 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping80_90
+            elseif ping <= 100 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping90_100
+            elseif ping <= 110 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping100_110
+            elseif ping <= 120 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping110_120
+            elseif ping <= 130 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping120_130
+            elseif ping <= 140 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping130_140
+            elseif ping <= 150 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping140_150
+            elseif ping <= 160 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping150_160
+            elseif ping <= 170 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping160_170
+            elseif ping <= 180 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping170_180
+            elseif ping <= 190 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping180_190
+            elseif ping <= 200 then
+                cfgSilentMain.Prediction = cfgAutoPred.ping190_200
+            end
+            task.wait(0.7)
+        end
+    end
+end))
